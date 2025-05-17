@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuthStore } from "../auth-store";
 
-const TABS = ["Word list", "Favorites"];
+const TABS = ["Word list", "Favorites", "History"];
 
 type DictionaryApiResponse = {
   results: DictionaryEntry[];
@@ -41,6 +41,20 @@ type FavoriteWord = {
 
 type FavoritesApiResponse = {
   results: FavoriteWord[];
+  totalDocs: number;
+  page: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrev: boolean;
+};
+
+type HistoryWord = {
+  word: string;
+  added: string;
+};
+
+type HistoryApiResponse = {
+  results: HistoryWord[];
   totalDocs: number;
   page: number;
   totalPages: number;
@@ -301,6 +315,73 @@ function FavoritesList({ onUnfavorite }: { onUnfavorite: (word: string) => void 
   );
 }
 
+function HistoryList() {
+  const token = useAuthStore((state) => state.token);
+  const [history, setHistory] = useState<HistoryWord[]>([]);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const observer = useRef<IntersectionObserver | null>(null);
+  const lastRowRef = useCallback(
+    (node: HTMLTableRowElement | null) => {
+      if (loading || !hasMore) return;
+      if (observer.current) observer.current.disconnect();
+      observer.current = new IntersectionObserver(entries => {
+        if (entries[0].isIntersecting && hasMore && !loading) {
+          setPage(prev => prev + 1);
+        }
+      });
+      if (node) observer.current.observe(node);
+    },
+    [loading, hasMore]
+  );
+
+  useEffect(() => {
+    if (!token || !hasMore) return;
+    setLoading(true);
+    setError("");
+    fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/user/me/history?page=${page}&limit=10`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+      .then(res => {
+        if (!res.ok) throw new Error("Failed to fetch history");
+        return res.json();
+      })
+      .then((data: HistoryApiResponse) => {
+        setHistory(prev => [...prev, ...data.results]);
+        setHasMore(data.hasNext);
+        setLoading(false);
+      })
+      .catch(() => {
+        setError("Could not load history");
+        setLoading(false);
+      });
+  }, [token, page]);
+
+  return (
+    <div className="flex-1 overflow-y-auto w-full">
+      {loading && <div className="text-center py-4 text-indigo-500">Loading...</div>}
+      {error && <div className="text-center py-4 text-red-500">{error}</div>}
+      <table className="w-full border-collapse bg-white rounded-lg shadow-md">
+        <tbody>
+          {history.map((item, idx, arr) => (
+            <tr key={item.word + item.added + idx} ref={idx === arr.length - 1 ? lastRowRef : undefined}>
+              <td className="border px-4 py-3 text-center text-gray-800 text-base font-medium">{item.word}</td>
+              <td className="border px-4 py-3 text-center text-gray-500 text-sm">{new Date(item.added).toLocaleString()}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {!loading && history.length === 0 && (
+        <div className="text-center py-4 text-gray-400 text-sm">Nenhum histórico</div>
+      )}
+    </div>
+  );
+}
+
 export default function DictionaryPage() {
   const [activeTab, setActiveTab] = useState(0);
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
@@ -384,6 +465,9 @@ export default function DictionaryPage() {
             )}
             {activeTab === 1 && (
               <FavoritesList onUnfavorite={handleUnfavoriteFromFavorites} />
+            )}
+            {activeTab === 2 && (
+              <HistoryList />
             )}
           </div>
         </div>
