@@ -197,20 +197,18 @@ function WordGrid({ onWordClick, selectedWord, favorites, onToggleFavorite }: { 
                       onClick={() => onWordClick(word)}
                     >
                       {word}
-                      <button
-                        className={`absolute top-1 right-1 w-6 h-6 flex items-center justify-center rounded-full ${isFavorite ? "bg-red-100 hover:bg-red-200" : "bg-green-100 hover:bg-green-200"}`}
-                        onClick={e => {
-                          e.stopPropagation();
-                          onToggleFavorite(word, isFavorite);
-                        }}
-                        aria-label={isFavorite ? "Remover dos favoritos" : "Adicionar aos favoritos"}
-                      >
-                        {isFavorite ? (
-                          <span className="text-red-500 text-lg">🗑️</span>
-                        ) : (
+                      {!isFavorite && (
+                        <button
+                          className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center rounded-full bg-green-100 hover:bg-green-200"
+                          onClick={e => {
+                            e.stopPropagation();
+                            onToggleFavorite(word, false);
+                          }}
+                          aria-label="Adicionar aos favoritos"
+                        >
                           <span className="text-green-600 text-lg">＋</span>
-                        )}
-                      </button>
+                        </button>
+                      )}
                     </td>
                   );
                 })}
@@ -228,7 +226,7 @@ function WordGrid({ onWordClick, selectedWord, favorites, onToggleFavorite }: { 
   );
 }
 
-function FavoritesList() {
+function FavoritesList({ onUnfavorite }: { onUnfavorite: (word: string) => void }) {
   const token = useAuthStore((state) => state.token);
   const [favorites, setFavorites] = useState<FavoriteWord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -270,6 +268,7 @@ function FavoritesList() {
         body: JSON.stringify({ word }),
       });
       setFavorites(favorites => favorites.filter(fav => fav.word !== word));
+      onUnfavorite(word);
     } catch {}
   };
 
@@ -351,6 +350,10 @@ export default function DictionaryPage() {
     }
   };
 
+  const handleUnfavoriteFromFavorites = (word: string) => {
+    setFavorites(favs => favs.filter(f => f !== word));
+  };
+
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
       <div className="bg-indigo-500 h-10 w-full" />
@@ -380,7 +383,7 @@ export default function DictionaryPage() {
               <WordGrid onWordClick={setSelectedWord} selectedWord={selectedWord} favorites={favorites} onToggleFavorite={handleToggleFavorite} />
             )}
             {activeTab === 1 && (
-              <FavoritesList />
+              <FavoritesList onUnfavorite={handleUnfavoriteFromFavorites} />
             )}
           </div>
         </div>
