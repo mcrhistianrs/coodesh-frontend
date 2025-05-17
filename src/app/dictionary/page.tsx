@@ -34,6 +34,20 @@ type WordDetailApiResponse = {
   results: WordDetail[];
 };
 
+type FavoriteWord = {
+  word: string;
+  added: string;
+};
+
+type FavoritesApiResponse = {
+  results: FavoriteWord[];
+  totalDocs: number;
+  page: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrev: boolean;
+};
+
 function TabButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
     <button
@@ -108,7 +122,7 @@ function WordDetailBox({ word }: { word: string }) {
   );
 }
 
-function WordGrid({ onWordClick, selectedWord }: { onWordClick: (word: string) => void; selectedWord: string | null }) {
+function WordGrid({ onWordClick, selectedWord, favorites, onToggleFavorite }: { onWordClick: (word: string) => void; selectedWord: string | null; favorites: string[]; onToggleFavorite: (word: string, isFavorite: boolean) => void }) {
   const [words, setWords] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -121,7 +135,7 @@ function WordGrid({ onWordClick, selectedWord }: { onWordClick: (word: string) =
       if (observer.current) observer.current.disconnect();
       observer.current = new IntersectionObserver(entries => {
         if (entries[0].isIntersecting && hasMore && !loading) {
-          setPage(prev => prev + 2); 
+          setPage(prev => prev + 2);
         }
       });
       if (node) observer.current.observe(node);
@@ -174,15 +188,32 @@ function WordGrid({ onWordClick, selectedWord }: { onWordClick: (word: string) =
                 key={rowIdx}
                 ref={isLastRow && words.length > 0 ? lastWordRef : undefined}
               >
-                {words.slice(rowIdx * 3, rowIdx * 3 + 3).map((word, colIdx) => (
-                  <td
-                    key={colIdx}
-                    className={`border px-4 py-3 text-center text-gray-800 text-base font-medium cursor-pointer transition ${selectedWord === word ? "bg-indigo-100" : "hover:bg-indigo-50"}`}
-                    onClick={() => onWordClick(word)}
-                  >
-                    {word}
-                  </td>
-                ))}
+                {words.slice(rowIdx * 3, rowIdx * 3 + 3).map((word, colIdx) => {
+                  const isFavorite = favorites.includes(word);
+                  return (
+                    <td
+                      key={colIdx}
+                      className={`border px-4 py-3 text-center text-gray-800 text-base font-medium cursor-pointer transition relative ${selectedWord === word ? "bg-indigo-100" : "hover:bg-indigo-50"}`}
+                      onClick={() => onWordClick(word)}
+                    >
+                      {word}
+                      <button
+                        className={`absolute top-1 right-1 w-6 h-6 flex items-center justify-center rounded-full ${isFavorite ? "bg-red-100 hover:bg-red-200" : "bg-green-100 hover:bg-green-200"}`}
+                        onClick={e => {
+                          e.stopPropagation();
+                          onToggleFavorite(word, isFavorite);
+                        }}
+                        aria-label={isFavorite ? "Remover dos favoritos" : "Adicionar aos favoritos"}
+                      >
+                        {isFavorite ? (
+                          <span className="text-red-500 text-lg">🗑️</span>
+                        ) : (
+                          <span className="text-green-600 text-lg">＋</span>
+                        )}
+                      </button>
+                    </td>
+                  );
+                })}
               </tr>
             );
           })}
@@ -197,9 +228,128 @@ function WordGrid({ onWordClick, selectedWord }: { onWordClick: (word: string) =
   );
 }
 
+function FavoritesList() {
+  const token = useAuthStore((state) => state.token);
+  const [favorites, setFavorites] = useState<FavoriteWord[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const fetchFavorites = async () => {
+    if (!token) return;
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/user/me/favorites`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) throw new Error("Failed to fetch favorites");
+      const data: FavoritesApiResponse = await res.json();
+      setFavorites(data.results);
+    } catch {
+      setError("Could not load favorites");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchFavorites();
+  }, [token]);
+
+  const handleUnfavorite = async (word: string) => {
+    if (!token) return;
+    try {
+      await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/dictionary/entries/en/${encodeURIComponent(word)}/unfavorite`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ word }),
+      });
+      setFavorites(favorites => favorites.filter(fav => fav.word !== word));
+    } catch {}
+  };
+
+  return (
+    <div className="flex-1 overflow-y-auto w-full">
+      {loading && <div className="text-center py-4 text-indigo-500">Loading...</div>}
+      {error && <div className="text-center py-4 text-red-500">{error}</div>}
+      <table className="w-full border-collapse bg-white rounded-lg shadow-md">
+        <tbody>
+          {favorites.map((fav) => (
+            <tr key={fav.word}>
+              <td className="border px-4 py-3 text-center text-gray-800 text-base font-medium">{fav.word}</td>
+              <td className="border px-4 py-3 text-center">
+                <button
+                  className="bg-red-100 hover:bg-red-200 rounded-full w-8 h-8 flex items-center justify-center"
+                  onClick={() => handleUnfavorite(fav.word)}
+                  aria-label="Remover dos favoritos"
+                >
+                  <span className="text-red-500 text-lg">🗑️</span>
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {!loading && favorites.length === 0 && (
+        <div className="text-center py-4 text-gray-400 text-sm">Nenhum favorito</div>
+      )}
+    </div>
+  );
+}
+
 export default function DictionaryPage() {
   const [activeTab, setActiveTab] = useState(0);
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
+  const [favorites, setFavorites] = useState<string[]>([]);
+  const token = useAuthStore((state) => state.token);
+
+  const fetchFavorites = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/user/me/favorites`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) throw new Error();
+      const data: FavoritesApiResponse = await res.json();
+      setFavorites(data.results.map(f => f.word));
+    } catch {}
+  };
+
+  useEffect(() => {
+    fetchFavorites();
+  }, [token]);
+
+  const handleToggleFavorite = async (word: string, isFavorite: boolean) => {
+    if (!token) return;
+    if (isFavorite) {
+      await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/dictionary/entries/en/${encodeURIComponent(word)}/unfavorite`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ word }),
+      });
+      setFavorites(favs => favs.filter(f => f !== word));
+    } else {
+      await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/dictionary/entries/en/${encodeURIComponent(word)}/favorite`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ word }),
+      });
+      setFavorites(favs => [...favs, word]);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
@@ -227,10 +377,10 @@ export default function DictionaryPage() {
               ))}
             </div>
             {activeTab === 0 && (
-              <WordGrid onWordClick={setSelectedWord} selectedWord={selectedWord} />
+              <WordGrid onWordClick={setSelectedWord} selectedWord={selectedWord} favorites={favorites} onToggleFavorite={handleToggleFavorite} />
             )}
             {activeTab === 1 && (
-              <div className="text-center text-gray-500 mt-8">Favorites (em breve)</div>
+              <FavoritesList />
             )}
           </div>
         </div>
