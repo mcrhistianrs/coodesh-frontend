@@ -204,19 +204,14 @@ export default function DictionaryPage() {
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
       <div className="bg-indigo-500 h-10 w-full" />
-      <div className="flex-1 flex flex-col items-center justify-start w-full px-2 md:px-8 py-6">
-        <div className="w-full max-w-5xl flex flex-row gap-8 h-full">
-          
-          <div className="flex flex-col w-1/3 min-w-[260px] max-w-xs">
-            {selectedWord ? (
-              <WordDetailBox word={selectedWord} />
-            ) : (
-              <div className="bg-purple-50 rounded-lg p-6 shadow-md min-h-[220px] flex items-center justify-center text-gray-400">
-                Selecione uma palavra
-              </div>
-            )}
+      <div className="flex-1 flex flex-col items-center justify-start w-full px-2 md:px-8 py-6 relative">
+        {selectedWord && (
+          <div className="fixed top-20 left-8 z-20 w-[320px] max-w-xs">
+            <WordDetailBox word={selectedWord} />
           </div>
-          
+        )}
+        <div className="w-full max-w-5xl flex flex-row gap-8 h-full">
+          <div className="w-1/3 min-w-[260px] max-w-xs" />
           <div className="flex-1 flex flex-col">
             <div className="flex border-b mb-4">
               {TABS.map((tab, idx) => (
