@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useAuthStore } from "../auth-store";
 
 const TABS = ["Word list", "Favorites"];
 
@@ -49,12 +50,19 @@ function WordDetailBox({ word }: { word: string }) {
   const [detail, setDetail] = useState<WordDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const token = useAuthStore((state) => state.token);
 
   useEffect(() => {
-    if (!word) return;
+    if (!word || !token) return;
     setLoading(true);
     setError("");
-    fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/dictionary/entries/en/${encodeURIComponent(word)}`)
+    fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/dictionary/entries/en/${encodeURIComponent(word)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    )
       .then(res => {
         if (!res.ok) throw new Error("Failed to fetch word detail");
         return res.json();
@@ -67,37 +75,34 @@ function WordDetailBox({ word }: { word: string }) {
         setError("Could not load word detail");
         setLoading(false);
       });
-  }, [word]);
+  }, [word, token]);
 
   return (
-    <div className="bg-purple-100 rounded-lg p-6 shadow-md min-h-[220px] flex flex-col items-center justify-center">
-      {loading && <div className="text-indigo-500">Loading...</div>}
-      {error && <div className="text-red-500">{error}</div>}
+    <div className="flex flex-col items-center">
+      <div className="bg-purple-100 rounded-lg p-6 shadow-md min-h-[120px] min-w-[200px] flex flex-col items-center justify-center mb-4 w-full">
+        {loading && <div className="text-indigo-500">Loading...</div>}
+        {error && <div className="text-red-500">{error}</div>}
+        {detail && (
+          <>
+            <div className="text-2xl font-bold text-gray-800 mb-2">{detail.word}</div>
+            {detail.phonetics && detail.phonetics.length > 0 && detail.phonetics[0].text && (
+              <div className="text-indigo-700 mb-2">{detail.phonetics[0].text}</div>
+            )}
+          </>
+        )}
+      </div>
       {detail && (
-        <>
-          <div className="text-2xl font-bold text-gray-800 mb-2">{detail.word}</div>
-          {detail.phonetics && detail.phonetics.length > 0 && (
-            <div className="text-indigo-700 mb-2">
-              {detail.phonetics[0].text}
-              {detail.phonetics[0].audio && (
-                <audio controls className="ml-2 align-middle">
-                  <source src={detail.phonetics[0].audio} type="audio/mpeg" />
-                </audio>
+        <div className="w-full">
+          <div className="font-semibold text-gray-700 mb-1">Meanings</div>
+          {detail.meanings.map((meaning, idx) => (
+            <div key={idx} className="mb-2">
+              <span className="italic text-indigo-700 mr-2">{meaning.partOfSpeech}</span>
+              {meaning.definitions[0]?.definition && (
+                <span className="text-gray-800">{meaning.definitions[0].definition}</span>
               )}
             </div>
-          )}
-          <div className="mt-2 w-full">
-            <div className="font-semibold text-gray-700 mb-1">Meanings</div>
-            {detail.meanings.map((meaning, idx) => (
-              <div key={idx} className="mb-2">
-                <span className="italic text-indigo-700 mr-2">{meaning.partOfSpeech}</span>
-                {meaning.definitions[0]?.definition && (
-                  <span className="text-gray-800">{meaning.definitions[0].definition}</span>
-                )}
-              </div>
-            ))}
-          </div>
-        </>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -116,7 +121,7 @@ function WordGrid({ onWordClick, selectedWord }: { onWordClick: (word: string) =
       if (observer.current) observer.current.disconnect();
       observer.current = new IntersectionObserver(entries => {
         if (entries[0].isIntersecting && hasMore && !loading) {
-          setPage(prev => prev + 2); // +2 porque cada "página" busca 10 palavras (duas de 5)
+          setPage(prev => prev + 2); 
         }
       });
       if (node) observer.current.observe(node);
@@ -131,7 +136,6 @@ function WordGrid({ onWordClick, selectedWord }: { onWordClick: (word: string) =
       setLoading(true);
       setError("");
       try {
-        // Busca 10 palavras: duas requisições de 5
         const fetchBatch = async (p: number) => {
           const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/dictionary/entries/en?limit=5&page=${p}`);
           if (!res.ok) throw new Error("Failed to fetch words");
@@ -202,7 +206,7 @@ export default function DictionaryPage() {
       <div className="bg-indigo-500 h-10 w-full" />
       <div className="flex-1 flex flex-col items-center justify-start w-full px-2 md:px-8 py-6">
         <div className="w-full max-w-5xl flex flex-row gap-8 h-full">
-          {/* Detalhe da palavra */}
+          
           <div className="flex flex-col w-1/3 min-w-[260px] max-w-xs">
             {selectedWord ? (
               <WordDetailBox word={selectedWord} />
@@ -212,7 +216,7 @@ export default function DictionaryPage() {
               </div>
             )}
           </div>
-          {/* Lista de palavras e abas */}
+          
           <div className="flex-1 flex flex-col">
             <div className="flex border-b mb-4">
               {TABS.map((tab, idx) => (

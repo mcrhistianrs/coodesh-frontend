@@ -3,9 +3,11 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { authApi } from '../api/auth';
+import { useAuthStore } from "../auth-store";
 
 export default function LoginPage() {
   const router = useRouter();
+  const setToken = useAuthStore((state) => state.setToken);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -18,7 +20,7 @@ export default function LoginPage() {
 
     try {
       const response = await authApi.signin({ email, password });
-      localStorage.setItem('token', response.token);
+      setToken(response.id);
       router.push('/dictionary'); 
     } catch  {
       setError('Invalid email or password');
