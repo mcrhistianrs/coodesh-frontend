@@ -1,25 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { addFavorite, fetchFavorites, fetchHistory, fetchWordDetail, fetchWords, removeFavorite } from "../api/services";
 import { useAuthStore } from "../auth-store";
 
+
 const TABS = ["Word list", "Favorites", "History"];
-
-type DictionaryApiResponse = {
-  results: DictionaryEntry[];
-  totalDocs: number;
-  page: number;
-  totalPages: number;
-  hasNext: boolean;
-  hasPrev: boolean;
-};
-
-type DictionaryEntry = {
-  fields: {
-    word: string;
-    _id: string;
-  };
-};
 
 type WordDetail = {
   word: string;
@@ -37,15 +23,6 @@ type WordDetailApiResponse = {
 type FavoriteWord = {
   word: string;
   added: string;
-};
-
-type FavoritesApiResponse = {
-  results: FavoriteWord[];
-  totalDocs: number;
-  page: number;
-  totalPages: number;
-  hasNext: boolean;
-  hasPrev: boolean;
 };
 
 type HistoryWord = {
@@ -84,17 +61,7 @@ function WordDetailBox({ word }: { word: string }) {
     if (!word || !token) return;
     setLoading(true);
     setError("");
-    fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/dictionary/entries/en/${encodeURIComponent(word)}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    )
-      .then(res => {
-        if (!res.ok) throw new Error("Failed to fetch word detail");
-        return res.json();
-      })
+    fetchWordDetail(word, token)
       .then((data: WordDetailApiResponse) => {
         setDetail(data.results[0]);
         setLoading(false);
@@ -159,23 +126,13 @@ function WordGrid({ onWordClick, selectedWord, favorites, onToggleFavorite }: { 
 
   useEffect(() => {
     let cancelled = false;
-    async function fetchWords() {
+    async function loadWords() {
       if (!hasMore) return;
       setLoading(true);
       setError("");
       try {
-        const fetchBatch = async (p: number) => {
-          const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/dictionary/entries/en?limit=5&page=${p}`);
-          if (!res.ok) throw new Error("Failed to fetch words");
-          const data: DictionaryApiResponse = await res.json();
-          return data.results.map((e: DictionaryEntry) => e.fields.word);
-        };
-        const [batch1, batch2] = await Promise.all([
-          fetchBatch(page),
-          fetchBatch(page + 1),
-        ]);
+        const newWords = await fetchWords(page);
         if (!cancelled) {
-          const newWords = [...batch1, ...batch2];
           setWords(prev => [...prev, ...newWords]);
           if (newWords.length < 10) setHasMore(false);
         }
@@ -185,7 +142,7 @@ function WordGrid({ onWordClick, selectedWord, favorites, onToggleFavorite }: { 
         if (!cancelled) setLoading(false);
       }
     }
-    fetchWords();
+    loadWords();
     return () => {
       cancelled = true;
     };
@@ -246,18 +203,12 @@ function FavoritesList({ onUnfavorite }: { onUnfavorite: (word: string) => void 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const fetchFavorites = useCallback(async () => {
+  const fetchFavs = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/user/me/favorites`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      if (!res.ok) throw new Error("Failed to fetch favorites");
-      const data: FavoritesApiResponse = await res.json();
+      const data = await fetchFavorites(token);
       setFavorites(data.results);
     } catch {
       setError("Could not load favorites");
@@ -267,20 +218,13 @@ function FavoritesList({ onUnfavorite }: { onUnfavorite: (word: string) => void 
   }, [token]);
 
   useEffect(() => {
-    fetchFavorites();
-  }, [fetchFavorites]);
+    fetchFavs();
+  }, [fetchFavs]);
 
   const handleUnfavorite = async (word: string) => {
     if (!token) return;
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/dictionary/entries/en/${encodeURIComponent(word)}/unfavorite`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ word }),
-      });
+      await removeFavorite(word, token);
       setFavorites(favorites => favorites.filter(fav => fav.word !== word));
       onUnfavorite(word);
     } catch {}
@@ -341,15 +285,7 @@ function HistoryList() {
     if (!token || !hasMore) return;
     setLoading(true);
     setError("");
-    fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/user/me/history?page=${page}&limit=10`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    })
-      .then(res => {
-        if (!res.ok) throw new Error("Failed to fetch history");
-        return res.json();
-      })
+    fetchHistory(token, page)
       .then((data: HistoryApiResponse) => {
         setHistory(prev => [...prev, ...data.results]);
         setHasMore(data.hasNext);
@@ -388,45 +324,25 @@ export default function DictionaryPage() {
   const [favorites, setFavorites] = useState<string[]>([]);
   const token = useAuthStore((state) => state.token);
 
-  const fetchFavorites = useCallback(async () => {
+  const fetchFavs = useCallback(async () => {
     if (!token) return;
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/user/me/favorites`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      if (!res.ok) throw new Error();
-      const data: FavoritesApiResponse = await res.json();
-      setFavorites(data.results.map(f => f.word));
+      const data = await fetchFavorites(token);
+      setFavorites(data.results.map((f: FavoriteWord) => f.word));
     } catch {}
   }, [token]);
 
   useEffect(() => {
-    fetchFavorites();
-  }, [fetchFavorites]);
+    fetchFavs();
+  }, [fetchFavs]);
 
   const handleToggleFavorite = async (word: string, isFavorite: boolean) => {
     if (!token) return;
     if (isFavorite) {
-      await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/dictionary/entries/en/${encodeURIComponent(word)}/unfavorite`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ word }),
-      });
+      await removeFavorite(word, token);
       setFavorites(favs => favs.filter(f => f !== word));
     } else {
-      await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/dictionary/entries/en/${encodeURIComponent(word)}/favorite`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ word }),
-      });
+      await addFavorite(word, token);
       setFavorites(favs => [...favs, word]);
     }
   };
