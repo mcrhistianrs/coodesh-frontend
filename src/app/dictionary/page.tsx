@@ -295,7 +295,7 @@ function HistoryList() {
         setError("Could not load history");
         setLoading(false);
       });
-  }, [token, page]);
+  }, [token, page, hasMore]);
 
   return (
     <div className="flex-1 overflow-y-auto w-full">
