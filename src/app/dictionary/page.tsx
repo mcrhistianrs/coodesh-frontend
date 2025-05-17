@@ -246,7 +246,7 @@ function FavoritesList({ onUnfavorite }: { onUnfavorite: (word: string) => void 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const fetchFavorites = async () => {
+  const fetchFavorites = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     setError("");
@@ -264,11 +264,11 @@ function FavoritesList({ onUnfavorite }: { onUnfavorite: (word: string) => void 
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
 
   useEffect(() => {
     fetchFavorites();
-  }, [token]);
+  }, [fetchFavorites]);
 
   const handleUnfavorite = async (word: string) => {
     if (!token) return;
@@ -301,7 +301,7 @@ function FavoritesList({ onUnfavorite }: { onUnfavorite: (word: string) => void 
                   onClick={() => handleUnfavorite(fav.word)}
                   aria-label="Remover dos favoritos"
                 >
-                  <span className="text-red-500 text-lg">🗑️</span>
+                  <span className="text-red-500 text-lg">-</span>
                 </button>
               </td>
             </tr>
@@ -388,7 +388,7 @@ export default function DictionaryPage() {
   const [favorites, setFavorites] = useState<string[]>([]);
   const token = useAuthStore((state) => state.token);
 
-  const fetchFavorites = async () => {
+  const fetchFavorites = useCallback(async () => {
     if (!token) return;
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/user/me/favorites`, {
@@ -400,11 +400,11 @@ export default function DictionaryPage() {
       const data: FavoritesApiResponse = await res.json();
       setFavorites(data.results.map(f => f.word));
     } catch {}
-  };
+  }, [token]);
 
   useEffect(() => {
     fetchFavorites();
-  }, [token]);
+  }, [fetchFavorites]);
 
   const handleToggleFavorite = async (word: string, isFavorite: boolean) => {
     if (!token) return;
